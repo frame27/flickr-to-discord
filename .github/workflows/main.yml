@@ -20,4 +20,4 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno run --allow-net --allow-env ./src/index.ts
+      - run: deno run --allow-net --allow-env --allow-import ./src/index.ts
