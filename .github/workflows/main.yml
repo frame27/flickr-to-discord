@@ -3,6 +3,7 @@ name: main
 on:
   schedule:
     - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 env:
   FLICKR_IDS: ${{ vars.FLICKR_IDS }}
