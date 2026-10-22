@@ -8,8 +8,9 @@ Flickr photos to a Discord channel through a webhook.
 * A description line starting with "By @" (for example `By @frame`), or "By @…"
   at the very end of the description, is used as
   the credit in the post's footer instead of being shown in the description.
-* Photos found in the same run are posted as image grids of up to 4, titled
-  like "Hunter Stadium - Stage (+3 more)" and linked to the photostream.
+* Photos found in the same run are posted together as one grid post, titled
+  like "Hunter Stadium - Stage (+4 more)" and linked to the photostream. Discord
+  shows up to 4 images; the title counts all of them.
 * New photos are posted oldest first.
 * On the very first run it only remembers the photos already on Flickr, so the
   channel does not get flooded. Only later uploads are posted.
@@ -34,7 +35,7 @@ Repository → Settings → Secrets and variables → Actions:
 | `UPSTASH_REDIS_REST_TOKEN` | Secret   | Upstash Redis REST token                               |
 | `EMBED_COLOR`              | Variable | Optional. Side bar color as hex, default `920000`      |
 | `POST_ON_FIRST_RUN`        | Variable | Optional. `true` to also post existing photos once     |
-| `GROUP_SIZE`               | Variable | Optional. Photos per grid, 1-4, default `4`            |
+| `GROUP_SIZE`               | Variable | Optional. `1` posts every photo separately             |
 
 ## Run locally
 

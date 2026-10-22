@@ -4,8 +4,11 @@ import { shorten } from "./description.ts";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const DESCRIPTION_MAX = 300;
 
-// One Discord message for 1-4 photos. Several photos become one image grid:
-// Discord merges embeds with the same url into a gallery of up to 4 images.
+// One Discord message for any number of photos. Several photos become one
+// image grid: Discord merges embeds with the same url into a gallery, but shows
+// at most 4 images, so the title counts all of them.
+const MAX_IMAGES = 4;
+
 const buildMessage = (
   feed: FlickrFeed,
   photos: FlickrPhoto[],
@@ -21,7 +24,7 @@ const buildMessage = (
   const credits = [...new Set(photos.flatMap((p) => p.credits))];
   const footer = credits.length ? shorten(credits.join(", "), 2000) : "Flickr";
 
-  const embeds = photos.map((p, i) =>
+  const embeds = photos.slice(0, MAX_IMAGES).map((p, i) =>
     i === 0
       ? {
         title,

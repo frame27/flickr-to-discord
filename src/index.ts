@@ -13,8 +13,9 @@ const webhookUrl = env("DISCORD_WEBHOOK_URL");
 const dryRun = env("DRY_RUN") === "true";
 const postOnFirstRun = env("POST_ON_FIRST_RUN") === "true";
 const color = parseInt(env("EMBED_COLOR").replace(/^#/, "") || "920000", 16);
-// photos found in the same run are posted as grids of up to 4 (1 = no grids)
-const groupSize = Math.min(4, Math.max(1, Number(env("GROUP_SIZE") || "4")));
+// photos found in the same run are posted together as one grid post
+// (GROUP_SIZE=1 posts every photo separately instead)
+const grouping = env("GROUP_SIZE") !== "1";
 
 if (flickrIds.length === 0) throw new Error("FLICKR_IDS is not set");
 if (!webhookUrl && !dryRun) throw new Error("DISCORD_WEBHOOK_URL is not set");
@@ -51,8 +52,8 @@ for (const flickrId of flickrIds) {
 
   console.log(`${flickrId}: ${fresh.length} new photo(s)`);
 
-  for (let i = 0; i < fresh.length; i += groupSize) {
-    const group = fresh.slice(i, i + groupSize);
+  const groups = grouping && fresh.length > 0 ? [fresh] : fresh.map((p) => [p]);
+  for (const group of groups) {
     const names = group.map((p) => p.title).join(" | ");
     if (dryRun) {
       console.log(`[dry run] would post: ${names}`);
