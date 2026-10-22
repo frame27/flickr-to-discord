@@ -5,7 +5,8 @@ Flickr photos to a Discord channel through a webhook.
 
 * Each post shows the photo title (linked to the photo on Flickr), its
   description, the large image and the upload time.
-* A description line starting with "By @" (for example `By @frame`) is used as
+* A description line starting with "By @" (for example `By @frame`), or "By @…"
+  at the very end of the description, is used as
   the credit in the post's footer instead of being shown in the description.
 * Photos found in the same run are posted as image grids of up to 4, titled
   like "Hunter Stadium - Stage (+3 more)" and linked to the photostream.

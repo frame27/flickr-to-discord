@@ -2,7 +2,7 @@ name: main
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '7,22,37,52 * * * *' # every 15 min, off the busy full hour
     - cron: '17 6 * * 1' # weekly keep-alive
   workflow_dispatch:
 

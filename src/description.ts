@@ -24,6 +24,7 @@ const decodeEntities = (s: string): string =>
   });
 
 // only a line starting exactly with "By @", e.g. "By @frame" or "By @frame & @matti"
+// (or "By @..." at the very end of the description, see below)
 const CREDIT_LINE = /^By @\S.{0,100}$/;
 
 export const parseDescription = (
@@ -52,7 +53,7 @@ export const parseDescription = (
 
   s = s
     .replace(/\r/g, "")
-    .replace(/\n/g, " ") // raw newlines are just HTML formatting
+    // Flickr keeps the line breaks typed in the description as raw newlines
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
     .replace(/<\/?p[^>]*>/gi, "\n")
@@ -66,7 +67,17 @@ export const parseDescription = (
     if (CREDIT_LINE.test(line)) credits.push(line);
     else lines.push(line);
   }
-  const text = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  let text = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  // also a credit at the very end of the text: "... Motor City. By @wiking_iv"
+  if (credits.length === 0) {
+    const m = text.match(
+      /(?:^|\s)(By @[\w.-]+(?:\s*(?:,|&|and)\s*@[\w.-]+)*)\.?$/,
+    );
+    if (m) {
+      credits.push(m[1].trim().replace(/\.+$/, ""));
+      text = text.slice(0, text.length - m[0].length).trim();
+    }
+  }
   return { text, credits };
 };
 
