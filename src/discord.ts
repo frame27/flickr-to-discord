@@ -6,6 +6,24 @@ const DESCRIPTION_MAX = 300;
 
 // One Discord message for 1-4 photos. Several photos become one image grid:
 // Discord merges embeds with the same url into a gallery of up to 4 images.
+// Everyone credited in these photos, each name once:
+// "By @frame", "By @frame & @matti", "By @frame, @matti & @wiking_iv"
+const creditLine = (photos: FlickrPhoto[]): string | undefined => {
+  const names = new Map<string, string>(); // lowercase -> as written first
+  for (const credit of photos.flatMap((p) => p.credits)) {
+    for (const m of credit.matchAll(/@[\w.-]*[\w-]/g)) {
+      const key = m[0].toLowerCase();
+      if (!names.has(key)) names.set(key, m[0]);
+    }
+  }
+  const list = [...names.values()];
+  if (list.length === 0) return undefined;
+  const joined = list.length === 1
+    ? list[0]
+    : `${list.slice(0, -1).join(", ")} & ${list[list.length - 1]}`;
+  return shorten(`By ${joined}`, 2000);
+};
+
 const buildMessage = (
   feed: FlickrFeed,
   photos: FlickrPhoto[],
@@ -18,8 +36,7 @@ const buildMessage = (
     : shorten(first.title, 256);
   // a grid links to the photostream, a single photo to its own page
   const url = grouped ? feed.profileUrl : first.link;
-  const credits = [...new Set(photos.flatMap((p) => p.credits))];
-  const footer = credits.length ? shorten(credits.join(", "), 2000) : "Flickr";
+  const footer = creditLine(photos) ?? "Flickr";
 
   const embeds = photos.map((p, i) =>
     i === 0
