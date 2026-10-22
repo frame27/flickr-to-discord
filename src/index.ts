@@ -1,37 +1,72 @@
-import { env } from "./deps.ts";
-import { initStore } from "./store.ts";
-import { fetchRSS } from "./flickr.ts";
-import { sendToDiscord } from "./discord.ts";
+import { fetchFeed } from "./flickr.ts";
+import { postPhoto } from "./discord.ts";
+import { createStore } from "./store.ts";
 
-const flickrRSSBaseUrl =
-  "https://www.flickr.com/services/feeds/photos_public.gne?lang=en-us&format=rss_200&id=";
+const KEEP_IDS = 300; // remembered photo IDs per Flickr user
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const env = (name: string) => (Deno.env.get(name) ?? "").trim();
 
-type Env = {
-  flickrIDs: string[];
-  discordWebhookUrl: string;
-  redisUrl: string;
-  redisToken: string;
-};
+const flickrIds = env("FLICKR_IDS").split(",").map((s) => s.trim()).filter(
+  Boolean,
+);
+const webhookUrl = env("DISCORD_WEBHOOK_URL");
+const dryRun = env("DRY_RUN") === "true";
+const postOnFirstRun = env("POST_ON_FIRST_RUN") === "true";
+const color = parseInt(env("EMBED_COLOR").replace(/^#/, "") || "920000", 16);
 
-const loadEnv = (): Env => {
-  const flickrIDs = env.require("FLICKR_IDS");
-  return {
-    flickrIDs: flickrIDs.split(","),
-    discordWebhookUrl: env.require("DISCORD_WEBHOOK_URL"),
-    redisUrl: env.require("UPSTASH_REDIS_REST_URL"),
-    redisToken: env.require("UPSTASH_REDIS_REST_TOKEN"),
-  };
-};
+if (flickrIds.length === 0) throw new Error("FLICKR_IDS is not set");
+if (!webhookUrl && !dryRun) throw new Error("DISCORD_WEBHOOK_URL is not set");
 
-const e = loadEnv();
-const store = await initStore(e.redisUrl, e.redisToken);
+const store = createStore();
+const state = await store.load();
+let failed = false;
 
-for (const id of e.flickrIDs) {
-  const rss = flickrRSSBaseUrl + id;
-  const lastHandledID = await store.get(id);
-  const payload = await fetchRSS(rss, lastHandledID);
-  store.set(id, payload.lastEntryID);
-  await sendToDiscord(payload, e.discordWebhookUrl);
+for (const flickrId of flickrIds) {
+  let feed;
+  try {
+    feed = await fetchFeed(flickrId);
+  } catch (e) {
+    // Flickr hiccups are skipped quietly; the next run tries again
+    console.log(`::warning::Could not read Flickr feed for ${flickrId}: ${e}`);
+    continue;
+  }
+
+  if (!state[flickrId] && !postOnFirstRun) {
+    state[flickrId] = feed.photos.map((p) => p.id).reverse();
+    await store.save(state);
+    console.log(
+      `${flickrId}: first run, remembered ${feed.photos.length} existing photos without posting them`,
+    );
+    continue;
+  }
+
+  const handled = (state[flickrId] ??= []);
+  const known = new Set(handled);
+  const fresh = feed.photos
+    .filter((p) => !known.has(p.id))
+    .reverse() // oldest first
+    .sort((a, b) => a.published.getTime() - b.published.getTime());
+
+  console.log(`${flickrId}: ${fresh.length} new photo(s)`);
+
+  for (const photo of fresh) {
+    if (dryRun) {
+      console.log(`[dry run] would post: ${photo.title} ${photo.imageUrl}`);
+    } else {
+      try {
+        await postPhoto(webhookUrl, feed, photo, color);
+      } catch (e) {
+        console.log(`::error::Posting "${photo.title}" failed: ${e}`);
+        failed = true;
+        break; // keep it unmarked so the next run tries again
+      }
+      console.log(`posted: ${photo.title}`);
+    }
+    handled.push(photo.id);
+    if (handled.length > KEEP_IDS) handled.splice(0, handled.length - KEEP_IDS);
+    await store.save(state);
+    if (!dryRun) await sleep(1000);
+  }
 }
 
-await store.save();
+if (failed) Deno.exit(1);

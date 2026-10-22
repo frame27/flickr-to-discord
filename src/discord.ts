@@ -1,46 +1,54 @@
-import { FlickrPayload } from "./flickr.ts";
+import { FlickrFeed, FlickrPhoto } from "./flickr.ts";
 
-export const sendToDiscord = async (
-  payload: FlickrPayload,
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export const postPhoto = async (
   webhookUrl: string,
-) => {
-  if (payload.images.length === 0) {
-    return;
-  }
+  feed: FlickrFeed,
+  photo: FlickrPhoto,
+  color: number,
+): Promise<void> => {
+  const body = {
+    // no username/avatar here: Discord uses the name and picture set on the webhook
+    allowed_mentions: { parse: [] },
+    embeds: [{
+      title: photo.title.slice(0, 256),
+      url: photo.link,
+      color,
+      image: { url: photo.imageUrl },
+      timestamp: photo.published.toISOString(),
+      author: { name: feed.userName.slice(0, 256), url: feed.profileUrl },
+      footer: { text: "Flickr" },
+    }],
+  };
+  const url = webhookUrl + (webhookUrl.includes("?") ? "&" : "?") + "wait=true";
 
-  const batchSize = 4; // four images per batch
-  const batches = Math.ceil(payload.images.length / batchSize);
-
-  for (let i = 0; i < batches; i++) {
-    const batchStart = i * batchSize;
-    const batchEnd = batchStart + batchSize;
-    const batch = payload.images.slice(batchStart, batchEnd);
-
-    const embeds = batch.map((url) => ({
-      url: payload.id,
-      image: {
-        url,
-      },
-      author: i !== 0 ? undefined : {
-        name: payload.userName,
-        url: payload.id,
-        icon_url: payload.iconUrl,
-      },
-    }));
-    const json = {
-      username: `Photos by ${payload.userName}`,
-      avatar_url:
-        "https://www.flickrhelp.com/hc/article_attachments/4419907666708/unnamed.png",
-      embeds,
-    };
-
-    await fetch(webhookUrl, {
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(json),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
-    await new Promise((res) => setTimeout(res, 500));
+    if (res.ok) {
+      await res.body?.cancel();
+      return;
+    }
+    const text = await res.text();
+    if (res.status === 429) {
+      // rate limited: Discord says how many seconds to wait
+      let wait = 2;
+      try {
+        wait = Number(JSON.parse(text).retry_after) || 2;
+      } catch { /* keep default */ }
+      console.log(`Discord rate limit, waiting ${wait}s`);
+      await sleep(wait * 1000 + 250);
+      continue;
+    }
+    if (res.status >= 500) {
+      await sleep(2000 * attempt);
+      continue;
+    }
+    throw new Error(`Discord webhook returned HTTP ${res.status}: ${text}`);
   }
+  throw new Error("Discord webhook kept failing after 5 attempts");
 };

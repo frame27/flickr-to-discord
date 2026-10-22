@@ -3,21 +3,40 @@ name: main
 on:
   schedule:
     - cron: '*/15 * * * *'
+    - cron: '17 6 * * 1' # weekly keep-alive
   workflow_dispatch:
+
+# never run two copies at once (avoids double posts)
+concurrency:
+  group: flickr-to-discord
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
 
 env:
   FLICKR_IDS: ${{ vars.FLICKR_IDS }}
-  DISCORD_WEBHOOK_URL: ${{ vars.DISCORD_WEBHOOK_URL }}
+  DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
   UPSTASH_REDIS_REST_URL: ${{ vars.UPSTASH_REDIS_REST_URL }}
   UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+  EMBED_COLOR: ${{ vars.EMBED_COLOR }}
+  POST_ON_FIRST_RUN: ${{ vars.POST_ON_FIRST_RUN }}
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    environment: env
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno run --allow-net --allow-env --allow-import ./src/index.ts
+      - run: deno run --allow-net --allow-env ./src/index.ts
+      # GitHub pauses scheduled workflows after 60 days without commits.
+      # Re-enabling it once a week keeps it running.
+      - name: Keep schedule alive
+        if: github.event.schedule == '17 6 * * 1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/main.yml/enable"
