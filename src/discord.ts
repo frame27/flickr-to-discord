@@ -1,33 +1,60 @@
 import { FlickrFeed, FlickrPhoto } from "./flickr.ts";
+import { shorten } from "./description.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const DESCRIPTION_MAX = 300;
 
-export const postPhoto = async (
+// One Discord message for 1-4 photos. Several photos become one image grid:
+// Discord merges embeds with the same url into a gallery of up to 4 images.
+const buildMessage = (
+  feed: FlickrFeed,
+  photos: FlickrPhoto[],
+  color: number,
+) => {
+  const first = photos[0];
+  const grouped = photos.length > 1;
+  const title = grouped
+    ? `${shorten(first.title, 230)} (+${photos.length - 1} more)`
+    : shorten(first.title, 256);
+  // a grid links to the photostream, a single photo to its own page
+  const url = grouped ? feed.profileUrl : first.link;
+  const credits = [...new Set(photos.flatMap((p) => p.credits))];
+  const footer = credits.length ? shorten(credits.join(", "), 2000) : "Flickr";
+
+  const embeds = photos.map((p, i) =>
+    i === 0
+      ? {
+        title,
+        url,
+        color,
+        description: first.description
+          ? shorten(first.description, DESCRIPTION_MAX)
+          : undefined,
+        image: { url: p.imageUrl },
+        timestamp: p.published.toISOString(),
+        author: { name: shorten(feed.userName, 256), url: feed.profileUrl },
+        footer: { text: footer },
+      }
+      : { url, image: { url: p.imageUrl } }
+  );
+  // no username/avatar here: Discord uses the name and picture set on the webhook
+  return { allowed_mentions: { parse: [] }, embeds };
+};
+
+export const postPhotos = async (
   webhookUrl: string,
   feed: FlickrFeed,
-  photo: FlickrPhoto,
+  photos: FlickrPhoto[],
   color: number,
 ): Promise<void> => {
-  const body = {
-    // no username/avatar here: Discord uses the name and picture set on the webhook
-    allowed_mentions: { parse: [] },
-    embeds: [{
-      title: photo.title.slice(0, 256),
-      url: photo.link,
-      color,
-      image: { url: photo.imageUrl },
-      timestamp: photo.published.toISOString(),
-      author: { name: feed.userName.slice(0, 256), url: feed.profileUrl },
-      footer: { text: "Flickr" },
-    }],
-  };
+  const body = JSON.stringify(buildMessage(feed, photos, color));
   const url = webhookUrl + (webhookUrl.includes("?") ? "&" : "?") + "wait=true";
 
   for (let attempt = 1; attempt <= 5; attempt++) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body,
     });
     if (res.ok) {
       await res.body?.cancel();

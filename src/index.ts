@@ -1,5 +1,5 @@
 import { fetchFeed } from "./flickr.ts";
-import { postPhoto } from "./discord.ts";
+import { postPhotos } from "./discord.ts";
 import { createStore } from "./store.ts";
 
 const KEEP_IDS = 300; // remembered photo IDs per Flickr user
@@ -13,6 +13,8 @@ const webhookUrl = env("DISCORD_WEBHOOK_URL");
 const dryRun = env("DRY_RUN") === "true";
 const postOnFirstRun = env("POST_ON_FIRST_RUN") === "true";
 const color = parseInt(env("EMBED_COLOR").replace(/^#/, "") || "920000", 16);
+// photos found in the same run are posted as grids of up to 4 (1 = no grids)
+const groupSize = Math.min(4, Math.max(1, Number(env("GROUP_SIZE") || "4")));
 
 if (flickrIds.length === 0) throw new Error("FLICKR_IDS is not set");
 if (!webhookUrl && !dryRun) throw new Error("DISCORD_WEBHOOK_URL is not set");
@@ -49,20 +51,22 @@ for (const flickrId of flickrIds) {
 
   console.log(`${flickrId}: ${fresh.length} new photo(s)`);
 
-  for (const photo of fresh) {
+  for (let i = 0; i < fresh.length; i += groupSize) {
+    const group = fresh.slice(i, i + groupSize);
+    const names = group.map((p) => p.title).join(" | ");
     if (dryRun) {
-      console.log(`[dry run] would post: ${photo.title} ${photo.imageUrl}`);
+      console.log(`[dry run] would post: ${names}`);
     } else {
       try {
-        await postPhoto(webhookUrl, feed, photo, color);
+        await postPhotos(webhookUrl, feed, group, color);
       } catch (e) {
-        console.log(`::error::Posting "${photo.title}" failed: ${e}`);
+        console.log(`::error::Posting "${names}" failed: ${e}`);
         failed = true;
-        break; // keep it unmarked so the next run tries again
+        break; // keep them unmarked so the next run tries again
       }
-      console.log(`posted: ${photo.title}`);
+      console.log(`posted: ${names}`);
     }
-    handled.push(photo.id);
+    handled.push(...group.map((p) => p.id));
     if (handled.length > KEEP_IDS) handled.splice(0, handled.length - KEEP_IDS);
     await store.save(state);
     if (!dryRun) await sleep(1000);

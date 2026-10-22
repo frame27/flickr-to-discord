@@ -1,9 +1,13 @@
+import { parseDescription } from "./description.ts";
+
 export type FlickrPhoto = {
   id: string;
   title: string;
   link: string;
   imageUrl: string;
   published: Date;
+  description: string; // plain text, credit lines removed
+  credits: string[]; // lines like "By @frame"
 };
 
 export type FlickrFeed = {
@@ -20,6 +24,7 @@ type RawItem = {
   link?: string;
   media?: { m?: string };
   published?: string;
+  description?: string;
 };
 
 const parseItem = (item: RawItem): FlickrPhoto | null => {
@@ -27,6 +32,7 @@ const parseItem = (item: RawItem): FlickrPhoto | null => {
   const id = link.match(/\/photos\/[^/]+\/(\d+)/)?.[1];
   const small = item.media?.m;
   if (!id || !small) return null;
+  const { text, credits } = parseDescription(item.description);
   return {
     id,
     title: item.title?.trim() || "Untitled",
@@ -34,6 +40,8 @@ const parseItem = (item: RawItem): FlickrPhoto | null => {
     // "_m" is the 240 px version; "_b" is the 1024 px one
     imageUrl: small.replace(/_m\.(jpg|jpeg|png|gif)$/i, "_b.$1"),
     published: new Date(item.published ?? Date.now()),
+    description: text,
+    credits,
   };
 };
 
