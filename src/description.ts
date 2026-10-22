@@ -23,8 +23,8 @@ const decodeEntities = (s: string): string =>
     return ENTITIES[code.toLowerCase()] ?? m;
   });
 
-// a line like "By @frame" or "by frameboost & MatiTheMudkip"
-const CREDIT_LINE = /^by\s+\S.{0,100}$/i;
+// only a line starting exactly with "By @", e.g. "By @frame" or "By @frame & @matti"
+const CREDIT_LINE = /^By @\S.{0,100}$/;
 
 export const parseDescription = (
   html: string | undefined,
